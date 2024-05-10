@@ -1,126 +1,194 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
 public class HeroMovement : MonoBehaviour
 {
-    [Header("Rigidbody")] 
-    private Rigidbody2D rigidbodyPlayer;
-
+    [Header("Game Input")] 
+    [SerializeField] private GameInput gameInput;
+    private float inputVector;
+    private bool inputJump;
+    private bool inputDash;
+    
     [Header("Movement")] 
-    [SerializeField] private float moveSpeed = 8f;
+    [SerializeField] private float playerSpeed = 10f;
+    private Rigidbody2D rigibodyPlayer;
     private bool isFacingRight = true;
-    private float horizontal;
-    private float acceleration = 20f;
-    private float deceleration = 12f;
 
     [Header("Jump")] 
+    [SerializeField] private float jumpForce = 5f;
     [SerializeField] private Transform groundCheck;
     [SerializeField] private LayerMask groundLayer;
-    [SerializeField] private float jumpingPower = 8f;
-    private bool doubleJump;
+    
+    [Header("Double Jump")] 
+    private bool canDoubleJump = false;
 
-    [Header("Dash")] 
-    private bool canDash = true;
-    private bool isDashing;
-    private float dashingPower = 24f;
-    private float dashingTime = 0.2f;
-    private float dashingCooldown = 1f;
-    [SerializeField] private TrailRenderer trailRenderer;
+    [Header("Coyote Time")] 
+    [SerializeField] private float coyoteTimeDuration = 0.2f;
+    private float coyoteTimeCounter;
+    
+    [Header("Gravity when Jumping")]
+    [SerializeField] private float fallMultiplier = 2.5f;
 
-    private void Start()
+    [Header("Dash")]
+    [SerializeField] private float dashSpeed = 12f;
+    [SerializeField] private float dashDuration = 0.2f;
+    [SerializeField] private float dashInterval = 0.5f;
+    private float dashTimer = 0f;
+    private bool canDash;
+    private float dashCooldownInterval = 0f;
+    
+    void Awake()
     {
-        rigidbodyPlayer = GetComponent<Rigidbody2D>();
+        // Récupérer le composant Rigidbody du joueur sur lui même lors du lancement du jeu
+        rigibodyPlayer = GetComponent<Rigidbody2D>();
     }
-
-    private void Update()
+    
+    void Update()
     {
-        if (isDashing)
-        {
-            return;
-        }
+        // Tous les input de touche de clavier récupéré dans le GameInput
+        inputVector = gameInput.GetInputMovement();
+        inputJump = gameInput.GetInputJump();
+        inputDash = gameInput.GetInputDash();
         
-        horizontal = Input.GetAxisRaw("Horizontal");
-
-        if (IsGrounded() && !Input.GetButton("Jump"))
-        {
-            doubleJump = false;
-        }
+        // Les mouvements de base avec le skin qui se retourne
+        Walk(inputVector);
+        Flip(inputVector);
         
-        if (Input.GetButtonDown("Jump"))
-        {
-            if (IsGrounded() || doubleJump)
-            {
-                rigidbodyPlayer.velocity = new Vector2(rigidbodyPlayer.velocity.x, jumpingPower);
-
-                doubleJump = !doubleJump;
-            }
-        }
-
-        /* Pour faire en sorte que quand tu appuies plus ou moins longtemps sur le bouton de saut le joueur saute plus haut ou moins haut
-         
-        if (Input.GetButtonUp("Jump") && rigidbodyPlayer.velocity.y > 0f)
-        {
-            rigidbodyPlayer.velocity = new Vector2(rigidbodyPlayer.velocity.x, rigidbodyPlayer.velocity.y * 0.5f);
-        }
-        */
-
-        if (Input.GetKeyDown(KeyCode.E) && canDash)
-        {
-            StartCoroutine(Dash());
-        }
+        // Le jump avec une redescente plus rapide pour faire un peu celest like
+        Jump(inputJump);
+        ApplyMoreGravityAfterJump();
         
-        Flip();
+        // Coyote time : un petit temps lorsque le joueur qui le sol pour qu'il puisse encore sauter
+        // Histoire qu'il n'aille pas besoin de faire du perfect
+        StartCoyoteTime();
+        
+        // Le dash
+        StartDash(inputDash);
+        Dash();
     }
-
-    private void FixedUpdate()
+    
+    #region Functions Basic Movement
+    
+    private void Walk(float inputVector)
     {
-        if (isDashing)
-        {
-            return;
-        }
-        
-        if (horizontal != 0)
-        {
-            rigidbodyPlayer.velocity = new Vector2(horizontal * (moveSpeed + acceleration * Time.fixedDeltaTime), rigidbodyPlayer.velocity.y);   
-        }
-        else
-        {
-            rigidbodyPlayer.velocity = new Vector2(horizontal * (moveSpeed - deceleration * Time.fixedDeltaTime), rigidbodyPlayer.velocity.y);   
-        }
+        rigibodyPlayer.velocity = new Vector2(inputVector * playerSpeed, rigibodyPlayer.velocity.y);
     }
-
-    private bool IsGrounded()
+    
+    private void Flip(float inputVector)
     {
-        return Physics2D.OverlapCircle(groundCheck.position, .2f, groundLayer);
-    }
-
-    private void Flip()
-    {
-        if (isFacingRight && horizontal < 0f || !isFacingRight && horizontal > 0f)
+        if (isFacingRight && inputVector < 0f || !isFacingRight && inputVector > 0f)
         {
             isFacingRight = !isFacingRight;
+            
             Vector3 localScale = transform.localScale;
             localScale.x *= -1f;
             transform.localScale = localScale;
         }
     }
+    
+    #endregion
 
-    private IEnumerator Dash()
+    #region Functions Jump 
+    
+    private void Jump(bool inputJump)
     {
-        canDash = false;
-        isDashing = true;
-        float originalGravity = rigidbodyPlayer.gravityScale;
-        rigidbodyPlayer.gravityScale = 0f;
-        rigidbodyPlayer.velocity = new Vector2(transform.localScale.x * dashingPower, 0f);
-        trailRenderer.emitting = true;
-        yield return new WaitForSeconds(dashingTime);
-        rigidbodyPlayer.gravityScale = originalGravity;
-        trailRenderer.emitting = false;
-        isDashing = false;
-        yield return new WaitForSeconds(dashingCooldown);
-        canDash = true;
+        if (inputJump && (IsTouchingGround() || coyoteTimeCounter > 0f)) 
+        {
+            ApplyVerticalVelocityAndDoubleJump(true);
+        } 
+        else if(inputJump && !IsTouchingGround())
+        {
+            if (canDoubleJump)
+            {
+                ApplyVerticalVelocityAndDoubleJump(false);
+            }
+        }
+
+        if (Input.GetKeyUp(KeyCode.Space) && rigibodyPlayer.velocity.y > 0f)
+        {
+            coyoteTimeCounter = 0f;
+        }
     }
+
+    private bool IsTouchingGround()
+    {
+        return Physics2D.OverlapCapsule(groundCheck.position, new Vector2(0.4f, 0.1f), CapsuleDirection2D.Horizontal, 0, groundLayer);
+    }
+
+    private void ApplyVerticalVelocityAndDoubleJump(bool doubleJump)
+    {
+        rigibodyPlayer.velocity = new Vector2(rigibodyPlayer.velocity.x, jumpForce);
+        canDoubleJump = doubleJump;
+    }
+
+    private void ApplyMoreGravityAfterJump()
+    {
+        if (rigibodyPlayer.velocity.y < 0)
+        {
+            rigibodyPlayer.velocity += Vector2.up * Physics2D.gravity.y * (fallMultiplier - 1) * Time.deltaTime;
+        }
+    }
+
+    #endregion
+
+    #region Functions Coyote Time
+
+    private void StartCoyoteTime()
+    {
+        if (IsTouchingGround())
+        {
+            coyoteTimeCounter = coyoteTimeDuration;
+        }
+        else
+        {
+            coyoteTimeCounter -= Time.deltaTime;
+        }
+    }
+   
+    #endregion
+    
+    #region Functions Dash
+
+    private void StartDash(bool inputDash)
+    {
+        if (dashCooldownInterval <= 0f && inputDash && !canDash)
+        {
+            canDash = true;
+            dashTimer = 0f;
+
+            dashCooldownInterval = dashInterval;
+        } 
+        else if (dashCooldownInterval > 0f)
+        {
+            dashCooldownInterval -= Time.deltaTime;
+        }
+    }
+    
+    private void Dash()
+    {
+        Vector2 dir = new Vector2(1, 0);
+
+        if (!isFacingRight)
+        {
+            dir = new Vector2(-1, 0);
+        }
+        
+        if (canDash)
+        {
+            dashTimer += Time.deltaTime;
+
+            if (dashTimer < dashDuration)
+            {
+                rigibodyPlayer.velocity = new Vector2(dir.x * dashSpeed, rigibodyPlayer.velocity.y);
+            }
+            else
+            {
+                rigibodyPlayer.velocity = new Vector2(dir.x * playerSpeed, rigibodyPlayer.velocity.y);
+                canDash = false;
+            }   
+        }
+    }
+    
+    #endregion
+
+    // Tips IA : states machine, patterne si il s'approche, raycast = champs de vision de l'ia 
 }
