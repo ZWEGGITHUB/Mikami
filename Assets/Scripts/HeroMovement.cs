@@ -1,3 +1,6 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class HeroMovement : MonoBehaviour
@@ -35,6 +38,20 @@ public class HeroMovement : MonoBehaviour
     private float dashTimer = 0f;
     private bool canDash;
     private float dashCooldownInterval = 0f;
+
+    [Header("Barre de Bug")] 
+    private float buggingNumber;
+    
+    [Header("Debug")]
+    [SerializeField] private bool _guiDebug = false;
+    
+    // Event to send bugging Number
+    public event EventHandler<OnBuggingEventArgs> OnBugging;
+
+    public class OnBuggingEventArgs : EventArgs
+    {
+        public float buggingNumberEvent;
+    }
     
     void Awake()
     {
@@ -118,6 +135,17 @@ public class HeroMovement : MonoBehaviour
     {
         rigibodyPlayer.velocity = new Vector2(rigibodyPlayer.velocity.x, jumpForce);
         canDoubleJump = doubleJump;
+
+        // barre de bug
+        if (buggingNumber < 1)
+        {
+            buggingNumber += 0.05f;
+        }
+        
+        OnBugging?.Invoke(this, new OnBuggingEventArgs()
+        {
+            buggingNumberEvent = buggingNumber
+        });
     }
 
     private void ApplyMoreGravityAfterJump()
@@ -154,8 +182,18 @@ public class HeroMovement : MonoBehaviour
         {
             canDash = true;
             dashTimer = 0f;
-
             dashCooldownInterval = dashInterval;
+
+            // barre de bug
+            if (buggingNumber < 1)
+            {
+                buggingNumber += 0.05f;   
+            }
+            
+            OnBugging?.Invoke(this, new OnBuggingEventArgs()
+            {
+                buggingNumberEvent = buggingNumber
+            });
         } 
         else if (dashCooldownInterval > 0f)
         {
@@ -189,6 +227,17 @@ public class HeroMovement : MonoBehaviour
     }
     
     #endregion
+    
+    
+    private void OnGUI()
+    {
+        if (!_guiDebug) return;
+        
+        GUILayout.BeginVertical(GUI.skin.box);
+        GUILayout.Label(gameObject.name);
+        GUILayout.Label($"Barre de bug amount = {buggingNumber}");
+        GUILayout.EndVertical();
+    }
 
     // Tips IA : states machine, patterne si il s'approche, raycast = champs de vision de l'ia 
 }
