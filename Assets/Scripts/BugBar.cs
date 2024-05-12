@@ -55,7 +55,6 @@ public class BugBar : MonoBehaviour
         
         if (localScale.x == -1)
         {
-            Debug.Log("changement");
             imageBarComponent.fillOrigin = 1;
         }
 
