@@ -29,4 +29,8 @@ public class GameInput : MonoBehaviour
         return inputVector;
     }
 
+    public bool GetInputMeleeAttack()
+    {
+        return Input.GetMouseButtonDown(0);
+    }
 }

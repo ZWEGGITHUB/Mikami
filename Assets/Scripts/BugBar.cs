@@ -9,7 +9,11 @@ public class BugBar : MonoBehaviour
 
     [Header("Entity Component")] 
     [SerializeField] private HeroMovement heroMovement;
+    [SerializeField] private HeroAttack heroAttack;
     [SerializeField] private Transform characterTransform;
+
+    [Header("Teleporter")] 
+    [SerializeField] private Transform teleporterArene;
     
     private void Start()
     {
@@ -27,15 +31,24 @@ public class BugBar : MonoBehaviour
 
     private void HeroMovement_OnBugging(object sender, HeroMovement.OnBuggingEventArgs e)
     {
-        imageBarComponent.fillAmount = e.buggingNumberEvent;
+        if (!heroAttack.AttackMode)
+        {
+            imageBarComponent.fillAmount = e.buggingNumberEvent;
         
-        if (Mathf.Approximately(imageBarComponent.fillAmount, 0f) || Mathf.Approximately(imageBarComponent.fillAmount, 1f))
-        {
-            Hide();
-        }
-        else
-        {
-            Show();
+            if (Mathf.Approximately(imageBarComponent.fillAmount, 0f) || Mathf.Approximately(imageBarComponent.fillAmount, 1f))
+            {
+                Hide();
+            }
+            else
+            {
+                Show();
+            }
+        
+            if(Mathf.Approximately(imageBarComponent.fillAmount, 1f))
+            {
+                characterTransform.position = teleporterArene.position;
+                heroAttack.AttackMode = true;
+            }   
         }
     }
     

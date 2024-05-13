@@ -1,6 +1,4 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class HeroMovement : MonoBehaviour
@@ -38,12 +36,12 @@ public class HeroMovement : MonoBehaviour
     private float dashTimer = 0f;
     private bool canDash;
     private float dashCooldownInterval = 0f;
-
+    
+    [Header("Attack Mode")]
+    private HeroAttack heroAttack;
+    
     [Header("Barre de Bug")] 
     private float buggingNumber;
-    
-    [Header("Debug")]
-    [SerializeField] private bool _guiDebug = false;
     
     // Event to send bugging Number
     public event EventHandler<OnBuggingEventArgs> OnBugging;
@@ -53,13 +51,19 @@ public class HeroMovement : MonoBehaviour
         public float buggingNumberEvent;
     }
     
-    void Awake()
+    // Fonctions de base
+    private void Awake()
     {
         // Récupérer le composant Rigidbody du joueur sur lui même lors du lancement du jeu
         rigibodyPlayer = GetComponent<Rigidbody2D>();
     }
-    
-    void Update()
+
+    private void Start()
+    {
+        heroAttack = GetComponent<HeroAttack>();
+    }
+
+    private void Update()
     {
         // Tous les input de touche de clavier récupéré dans le GameInput
         inputVector = gameInput.GetInputMovement();
@@ -136,16 +140,19 @@ public class HeroMovement : MonoBehaviour
         rigibodyPlayer.velocity = new Vector2(rigibodyPlayer.velocity.x, jumpForce);
         canDoubleJump = doubleJump;
 
-        // barre de bug
-        if (buggingNumber < 1)
+        // barre de bug dans le monde normal
+        if (!heroAttack.AttackMode)
         {
-            buggingNumber += 0.05f;
-        }
+            if (buggingNumber < 1)
+            {
+                buggingNumber += 0.05f;
+            }
         
-        OnBugging?.Invoke(this, new OnBuggingEventArgs()
-        {
-            buggingNumberEvent = buggingNumber
-        });
+            OnBugging?.Invoke(this, new OnBuggingEventArgs()
+            {
+                buggingNumberEvent = buggingNumber
+            });   
+        }
     }
 
     private void ApplyMoreGravityAfterJump()
@@ -184,16 +191,19 @@ public class HeroMovement : MonoBehaviour
             dashTimer = 0f;
             dashCooldownInterval = dashInterval;
 
-            // barre de bug
-            if (buggingNumber < 1)
+            // barre de bug uniquement dans le monde normal
+            if (!heroAttack.AttackMode)
             {
-                buggingNumber += 0.05f;   
-            }
+                if (buggingNumber < 1)
+                {
+                    buggingNumber += 0.05f;   
+                }
             
-            OnBugging?.Invoke(this, new OnBuggingEventArgs()
-            {
-                buggingNumberEvent = buggingNumber
-            });
+                OnBugging?.Invoke(this, new OnBuggingEventArgs()
+                {
+                    buggingNumberEvent = buggingNumber
+                });   
+            }
         } 
         else if (dashCooldownInterval > 0f)
         {
@@ -216,28 +226,40 @@ public class HeroMovement : MonoBehaviour
 
             if (dashTimer < dashDuration)
             {
-                rigibodyPlayer.velocity = new Vector2(dir.x * dashSpeed, rigibodyPlayer.velocity.y);
+                if (!heroAttack.AttackMode)
+                {
+                    rigibodyPlayer.velocity = new Vector2(dir.x * dashSpeed, rigibodyPlayer.velocity.y);
+                }
+                else
+                {
+                    rigibodyPlayer.velocity = new Vector2(dir.x * heroAttack.DashAttackSpeedPower, rigibodyPlayer.velocity.y);
+                    
+                    // Detect ennemis around
+                    RaycastHit2D hitObject = Physics2D.CircleCast(
+                        heroAttack.DashPointAttack.position, 
+                        heroAttack.CircleDashAttackCastRange, 
+                        Vector2.right, heroAttack.CircleDashAttackCastRange,
+                        heroAttack.EnemyLayer);
+                    
+                    
+                    if (hitObject.transform != null)
+                    {
+                        if (hitObject.transform.TryGetComponent(out EnemyLife enemyComponent))
+                        {
+                            // Damage them
+                            Debug.Log("You hit an ennemy : " + enemyComponent);
+                            enemyComponent.TakeDamage(heroAttack.AttackDashPower);
+                        }
+                    }
+                }
             }
             else
             {
                 rigibodyPlayer.velocity = new Vector2(dir.x * playerSpeed, rigibodyPlayer.velocity.y);
                 canDash = false;
-            }   
+            }
         }
     }
     
     #endregion
-    
-    
-    private void OnGUI()
-    {
-        if (!_guiDebug) return;
-        
-        GUILayout.BeginVertical(GUI.skin.box);
-        GUILayout.Label(gameObject.name);
-        GUILayout.Label($"Barre de bug amount = {buggingNumber}");
-        GUILayout.EndVertical();
-    }
-
-    // Tips IA : states machine, patterne si il s'approche, raycast = champs de vision de l'ia 
 }
