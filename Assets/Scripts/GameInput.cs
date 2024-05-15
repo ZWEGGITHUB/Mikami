@@ -2,6 +2,8 @@ using UnityEngine;
 
 public class GameInput : MonoBehaviour
 {
+    // All the input of the game  
+    
     public bool GetInputDash()
     {
         return Input.GetKeyDown(KeyCode.E);

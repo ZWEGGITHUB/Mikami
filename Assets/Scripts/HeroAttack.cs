@@ -35,7 +35,7 @@ public class HeroAttack : MonoBehaviour
     private Animator heroAnimator;
     private const string ATTACKTRIGGER = "IsAttack";
 
-    [Header("Detection Point")] 
+    [Header("Attack Detection Point")] 
     [SerializeField] private Transform detectionPointMeleeAttack;
     [SerializeField] private Transform dashPointAttack;
 
